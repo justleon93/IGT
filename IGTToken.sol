@@ -1,10 +1,9 @@
-
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.0.1/contracts/token/ERC20/ERC20.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.0.1/contracts/access/Ownable.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.0.1/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
 
 contract IGTToken is ERC20, Ownable, Pausable {
     uint256 public taxRate = 150; // 1.5% = 150 / 10000
@@ -71,3 +70,4 @@ contract IGTToken is ERC20, Ownable, Pausable {
         }
     }
 }
+
