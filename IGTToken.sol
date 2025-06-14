@@ -1,28 +1,45 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/ERC20.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/access/Ownable.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 
-contract IGTToken is ERC20, Ownable, Pausable {
-    uint256 public taxRate = 150; // 1.5%
-    uint256 public liquidityRate = 50; // 0.5%
-    address public taxWallet;
+contract IllyrianGoldToken is ERC20, Pausable, Ownable, ERC20Burnable {
+    address public treasuryWallet;
     address public liquidityWallet;
 
-    mapping(address => bool) public isExcludedFromTax;
+    uint256 public taxTreasury = 150; // 1.5%
+    uint256 public taxLiquidity = 50; // 0.5%
+    uint256 public constant TAX_DIVISOR = 10000;
 
-    constructor() ERC20("Illyrian Gold Token", "IGT") {
+    mapping(address => bool) private _isExcludedFromFee;
+
+    constructor(address _treasuryWallet, address _liquidityWallet) ERC20("ILLYRIAN GOLD TOKEN", "IGT") {
+        require(_treasuryWallet != address(0), "Invalid treasury address");
+        require(_liquidityWallet != address(0), "Invalid liquidity address");
+
+        treasuryWallet = _treasuryWallet;
+        liquidityWallet = _liquidityWallet;
+
         uint256 totalSupply = 100_000_000 * 10 ** decimals();
-        _mint(msg.sender, 10_000_000 * 10 ** decimals()); // 10% për ty
-        _mint(address(this), totalSupply - (10_000_000 * 10 ** decimals())); // pjesa tjetër
+        
+        // 10% për krijuesin
+        _mint(msg.sender, totalSupply * 10 / 100);
+        
+        // 15% për giveaway
+        _mint(msg.sender, totalSupply * 15 / 100);
+        
+        // 15% për presale
+        _mint(msg.sender, totalSupply * 15 / 100);
+        
+        // 60% për publikun
+        _mint(msg.sender, totalSupply * 60 / 100);
 
-        taxWallet = msg.sender;
-        liquidityWallet = msg.sender;
-
-        isExcludedFromTax[msg.sender] = true;
-        isExcludedFromTax[address(this)] = true;
+        // Exclude owner from tax
+        _isExcludedFromFee[msg.sender] = true;
+        _isExcludedFromFee[address(this)] = true;
     }
 
     function pause() public onlyOwner {
@@ -33,40 +50,27 @@ contract IGTToken is ERC20, Ownable, Pausable {
         _unpause();
     }
 
-    function setTaxRate(uint256 _tax, uint256 _liquidity) public onlyOwner {
-        require(_tax + _liquidity <= 2000, "Max total tax is 20%");
-        taxRate = _tax;
-        liquidityRate = _liquidity;
+    function setFeeExempt(address account, bool exempt) external onlyOwner {
+        _isExcludedFromFee[account] = exempt;
     }
 
-    function setTaxWallet(address _taxWallet, address _liquidityWallet) public onlyOwner {
-        taxWallet = _taxWallet;
-        liquidityWallet = _liquidityWallet;
+    function setTaxRates(uint256 _treasury, uint256 _liquidity) external onlyOwner {
+        require(_treasury + _liquidity <= 1000, "Tax too high"); // Max 10%
+        taxTreasury = _treasury;
+        taxLiquidity = _liquidity;
     }
 
-    function excludeFromTax(address account, bool excluded) public onlyOwner {
-        isExcludedFromTax[account] = excluded;
-    }
-
-    function burn(uint256 amount) public {
-        _burn(msg.sender, amount);
-    }
-
-    function _transfer(
-        address from,
-        address to,
-        uint256 amount
-    ) internal override whenNotPaused {
-        if (isExcludedFromTax[from] || isExcludedFromTax[to]) {
+    function _transfer(address from, address to, uint256 amount) internal override whenNotPaused {
+        if (_isExcludedFromFee[from] || _isExcludedFromFee[to]) {
             super._transfer(from, to, amount);
         } else {
-            uint256 taxAmount = (amount * taxRate) / 10000;
-            uint256 liquidityAmount = (amount * liquidityRate) / 10000;
-            uint256 sendAmount = amount - taxAmount - liquidityAmount;
+            uint256 treasuryFee = (amount * taxTreasury) / TAX_DIVISOR;
+            uint256 liquidityFee = (amount * taxLiquidity) / TAX_DIVISOR;
+            uint256 netAmount = amount - treasuryFee - liquidityFee;
 
-            super._transfer(from, taxWallet, taxAmount);
-            super._transfer(from, liquidityWallet, liquidityAmount);
-            super._transfer(from, to, sendAmount);
+            super._transfer(from, treasuryWallet, treasuryFee);
+            super._transfer(from, liquidityWallet, liquidityFee);
+            super._transfer(from, to, netAmount);
         }
     }
 }
